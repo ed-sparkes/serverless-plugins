@@ -28,14 +28,6 @@ const createLambdaContext = require('serverless-offline/src/createLambdaContext'
 const NO_KINESIS_FOUND = 'Could not find kinesis stream';
 const KINESIS_RETRY_DELAY = 2000;
 
-const fromCallback = fun =>
-  new Promise((resolve, reject) => {
-    fun((err, data) => {
-      if (err) return reject(err);
-      resolve(data);
-    });
-  });
-
 const printBlankLine = () => console.log();
 
 const extractStreamNameFromARN = arn => {
@@ -159,17 +151,20 @@ class ServerlessOfflineKinesis {
 
     this.serverless.cli.log(`${streamName}`);
 
-    const kinesisStream = await fromCallback(cb =>
-      client.describeStream(
-        {
-          StreamName: streamName
-        },
-        cb
-      )
-    ).catch(err => null);
-    if (!kinesisStream) {
+    const kinesisStream = await client
+      .describeStream({
+        StreamName: streamName
+      })
+      .promise()
+      .catch(err => err);
+
+    if (kinesisStream instanceof Error) {
       if (retry) {
-        this.serverless.cli.log(`${streamName} - not Found, retrying in ${KINESIS_RETRY_DELAY}ms`);
+        this.serverless.cli.log(
+          `${streamName} - not found because of ${
+            kinesisStream.code
+          }, retrying in ${KINESIS_RETRY_DELAY}ms`
+        );
         setTimeout(
           this.createKinesisReadable.bind(this),
           KINESIS_RETRY_DELAY,
